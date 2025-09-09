@@ -1,0 +1,142 @@
+name: Build App With Pake CLI
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.15.0"
+  APP_NAME: "ResourceAggregation"
+  APP_URL: "https://robot.yhuisec.com/"
+
+on:
+  workflow_dispatch: # 手动触发，不需要输入参数
+#  push:
+#    branches:
+#      - main # 推送到 main 分支时自动构建
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - "windows-latest"
+          - "macos-latest"
+          - "ubuntu-24.04"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-env
+        with:
+          mode: build
+
+      - name: Cache Node dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install pake-cli
+        shell: bash
+        run: |
+          echo "Installing latest pake-cli..."
+          pnpm install pake-cli@latest
+          if [ ! -d "node_modules/pake-cli" ]; then
+            echo "Error: Failed to install pake-cli"
+            exit 1
+          fi
+
+      - name: Rust cache restore
+        uses: actions/cache/restore@v4.2.0
+        id: cache_store
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            node_modules/pake-cli/src-tauri/target/
+          key: ${{ matrix.platform }}-cargo-${{ hashFiles('node_modules/pake-cli/src-tauri/Cargo.lock') }}
+
+      - name: Build with pake-cli
+        timeout-minutes: 15
+        run: |
+          node ./scripts/github-action-build.js
+        env:
+          URL: ${{ env.APP_URL }}
+          NAME: ${{ env.APP_NAME }}
+          ICON: ""
+          HEIGHT: "780"
+          WIDTH: "1200"
+          HIDE_TITLE_BAR: "false"
+          FULLSCREEN: "false"
+          MULTI_ARCH: "false"
+          TARGETS: ${{ matrix.platform == 'ubuntu-24.04' && 'deb,rpm,appimage' || '' }}
+          PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+          PKG_CONFIG_ALLOW_SYSTEM_LIBS: 1
+          PKG_CONFIG_ALLOW_SYSTEM_CFLAGS: 1
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-${{ matrix.platform }}
+          path: node_modules/pake-cli/output/*
+          retention-days: 3
+
+      - name: Rust cache store
+        uses: actions/cache/save@v4.2.0
+        if: steps.cache_store.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            node_modules/pake-cli/src-tauri/target/
+          key: ${{ matrix.platform }}-cargo-${{ hashFiles('node_modules/pake-cli/src-tauri/Cargo.lock') }}
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./dist
+
+      - name: Delete existing "latest" release & tag
+        run: |
+          set -e
+          echo "Checking and deleting old release/tag 'latest' if exists..."
+
+          # 删除 release
+          gh release delete latest -y || echo "No existing release found"
+
+          # 删除 tag
+          git push origin :refs/tags/latest || echo "No existing tag found"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get build timestamp
+        id: timestamp
+        run: echo "ts=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release (latest)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "ResourceAggregation Latest Build"
+          body: |
+            Auto build for ResourceAggregation via pake-cli
+            Build Time: ${{ steps.timestamp.outputs.ts }}
+          files: ./dist/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
