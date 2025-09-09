@@ -1,4 +1,4 @@
-name: Build App With Pake CLI
+name: Build App With Pake CLI & Push
 
 env:
   NODE_VERSION: "22"
