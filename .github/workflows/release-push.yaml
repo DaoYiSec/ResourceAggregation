@@ -5,6 +5,7 @@ env:
   PNPM_VERSION: "10.15.0"
   APP_NAME: "ResourceAggregation"
   APP_URL: "https://robot.yhuisec.com/"
+  KEEP_BINARY: true
 
 on:
   workflow_dispatch: # 手动触发，不需要输入参数

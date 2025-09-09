@@ -140,6 +140,11 @@ class PakeBuildManager {
         "ℹ️  No icon provided, will attempt to fetch favicon or use default",
       );
     }
+    // KEEP BINARY
+    if (process.env.KEEP_BINARY === "true") {
+        params.push("--keep-binary")
+    }
+
 
     return params;
   }
