@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "icon": ["icons/weekly.icns"],
+    "active": true,
+    "targets": ["dmg"]
+  }
+}
