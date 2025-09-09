@@ -142,9 +142,8 @@ class PakeBuildManager {
     }
     // KEEP BINARY
     if (process.env.KEEP_BINARY === "true") {
-        params.push("--keep-binary")
+      params.push("--keep-binary");
     }
-
 
     return params;
   }
